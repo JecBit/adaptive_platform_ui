@@ -159,7 +159,7 @@ class AdaptiveAppBarAction {
   ///   capsule, the same badge the tabs use. Counts above 99 show as "99+".
   /// - **iOS <26, Android**: An [AdaptiveBadge] drawn on the icon.
   /// - **iOS 26+ horizontal toolbar**: The item's own `UIBarButtonItem.badge`
-  ///   (new in iOS 26), which UIKit draws and caps.
+  ///   (new in iOS 26), drawn by UIKit.
   ///
   /// Null or 0 shows no badge.
   ///
