@@ -267,6 +267,22 @@ AdaptiveAppBarAction(
 )
 ```
 
+- **Pictures.** `iconImage` (PNG or JPEG bytes) shows a picture, such as a
+  profile photo, in place of the symbol: round and as it is (not tinted) on the
+  iOS 26 toolbar, a round `Image.memory` elsewhere. The native item decodes it
+  at the size it draws, and falls back to `iosSymbol` if the bytes do not
+  decode. Keep the bytes small: they cross the platform channel on every
+  change. Give the action a `label`, which is what VoiceOver reads:
+
+```dart
+AdaptiveAppBarAction(
+  iosSymbol: 'person.crop.circle', // until the photo is ready
+  iconImage: photoBytes,
+  label: 'My profile',
+  onPressed: openProfile,
+)
+```
+
 Not using `AdaptiveApp`? Install the host yourself, around the navigator
 (see [Migrating to 1.0.0](#migrating-to-100)):
 
