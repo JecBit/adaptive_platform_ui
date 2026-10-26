@@ -443,8 +443,8 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView {
     }
 
     /// [data] as a circle of [pictureSize], rendered as it is: the bar does
-    /// not tint it. Decoded at the size it is drawn, so a photo of a few
-    /// megabytes costs no more than a small one.
+    /// not tint it. Decoded at the size it is drawn (an ImageIO thumbnail),
+    /// not at the size of the file.
     private static func roundPicture(from data: Data, scale: CGFloat) -> UIImage? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
