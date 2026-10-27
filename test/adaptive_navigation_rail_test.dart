@@ -460,4 +460,55 @@ void main() {
       expect(find.byKey(keys[0]), findsOneWidget);
     }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
   });
+
+  group('itemExtent', () {
+    test('sizes the tab capsule by the cell, between its insets', () {
+      expect(
+        AdaptiveTabCapsule.heightFor(5, itemExtent: 44),
+        5 * 44 + 2 * IOS26GlassCapsule.tabsInset,
+      );
+      expect(AdaptiveTabCapsule.heightFor(5), IOS26GlassCapsule.tabsHeight(5));
+    });
+
+    test('sizes the action capsule by the cell', () {
+      expect(AdaptiveActionCapsule.heightFor(2, itemExtent: 44), 88);
+      expect(
+        AdaptiveActionCapsule.heightFor(2),
+        IOS26GlassCapsule.actionsHeight(2),
+      );
+    });
+
+    testWidgets('the capsules take that height', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Column(
+            children: [
+              AdaptiveTabCapsule(
+                destinations: _destinations,
+                selectedIndex: 0,
+                onDestinationSelected: (_) {},
+                itemExtent: 44,
+              ),
+              AdaptiveActionCapsule(
+                actions: [
+                  AdaptiveAppBarAction(
+                    iosSymbol: 'bell',
+                    icon: Icons.notifications_outlined,
+                    onPressed: () {},
+                  ),
+                ],
+                itemExtent: 44,
+              ),
+            ],
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSize(find.byType(AdaptiveTabCapsule)).height,
+        3 * 44 + 2 * IOS26GlassCapsule.tabsInset,
+      );
+      expect(tester.getSize(find.byType(AdaptiveActionCapsule)).height, 44);
+    });
+  });
 }

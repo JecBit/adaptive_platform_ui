@@ -48,6 +48,7 @@ class AdaptiveTabCapsule extends StatelessWidget {
     this.native = true,
     this.destinationKeys,
     this.fallbackIcons,
+    this.itemExtent,
   }) : assert(
          destinationKeys == null ||
              destinationKeys.length == destinations.length,
@@ -78,10 +79,20 @@ class AdaptiveTabCapsule extends StatelessWidget {
   /// Symbol it cannot draw.
   final List<Widget>? fallbackIcons;
 
+  /// Height of one tab, for a column with its own measure; by default the
+  /// one the system's bar uses.
+  final double? itemExtent;
+
   static double widthFor({bool showLabels = false}) =>
       showLabels ? IOS26GlassCapsule.labeledWidth : IOS26GlassCapsule.width;
 
-  static double heightFor(int count, {bool showLabels = false}) => showLabels
+  static double heightFor(
+    int count, {
+    bool showLabels = false,
+    double? itemExtent,
+  }) => itemExtent != null
+      ? count * itemExtent + 2 * IOS26GlassCapsule.tabsInset
+      : showLabels
       ? IOS26GlassCapsule.labeledTabsHeight(count)
       : IOS26GlassCapsule.tabsHeight(count);
 
@@ -89,7 +100,11 @@ class AdaptiveTabCapsule extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: widthFor(showLabels: showLabels),
-      height: heightFor(destinations.length, showLabels: showLabels),
+      height: heightFor(
+        destinations.length,
+        showLabels: showLabels,
+        itemExtent: itemExtent,
+      ),
       child: _withAnchors(
         IOS26GlassCapsule(
           items: [
@@ -124,6 +139,7 @@ class AdaptiveActionCapsule extends StatelessWidget {
     this.actionKeys,
     this.native = true,
     this.width = IOS26GlassCapsule.width,
+    this.itemExtent,
   }) : assert(actionKeys == null || actionKeys.length == actions.length);
 
   final List<AdaptiveAppBarAction> actions;
@@ -136,7 +152,13 @@ class AdaptiveActionCapsule extends StatelessWidget {
 
   final double width;
 
-  static double heightFor(int count) => IOS26GlassCapsule.actionsHeight(count);
+  /// Height of one control, for a column with its own measure; by default the
+  /// one the system's bar uses.
+  final double? itemExtent;
+
+  static double heightFor(int count, {double? itemExtent}) => itemExtent != null
+      ? count * itemExtent
+      : IOS26GlassCapsule.actionsHeight(count);
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +166,7 @@ class AdaptiveActionCapsule extends StatelessWidget {
     const menuStride = 1000;
     return SizedBox(
       width: width,
-      height: heightFor(actions.length),
+      height: heightFor(actions.length, itemExtent: itemExtent),
       child: _withAnchors(
         IOS26GlassCapsule(
           items: [
