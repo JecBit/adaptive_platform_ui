@@ -56,6 +56,7 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
     private var selectedIndex: Int?
     private var tint: UIColor?
     private var inset: CGFloat = 0
+    private var showsLabels = false
     private var stackTop: NSLayoutConstraint?
     private var stackBottom: NSLayoutConstraint?
     private var imageCache: [String: UIImage] = [:]
@@ -151,6 +152,10 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
             stackBottom?.constant = -inset
         }
 
+        if params.keys.contains("items") {
+            showsLabels = params["showLabels"] as? Bool ?? false
+        }
+
         let newSelected = (params["selectedIndex"] as? NSNumber)?.intValue
         let selectionChanged = newSelected != selectedIndex
         selectedIndex = newSelected
@@ -241,6 +246,16 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
 
             if let image = image(for: item, selected: selected, index: index) {
                 config.image = image
+                // A rail: the label under the icon, as the tab bar shows it.
+                if showsLabels, let label = item["label"] as? String {
+                    var text = AttributedString(label)
+                    text.font = .systemFont(ofSize: 10, weight: selected ? .semibold : .medium)
+                    config.attributedTitle = text
+                    config.imagePlacement = .top
+                    config.imagePadding = 3
+                    config.titleLineBreakMode = .byTruncatingTail
+                    config.titleAlignment = .center
+                }
             } else if let title = item["title"] as? String {
                 var text = AttributedString(title)
                 text.font = .systemFont(ofSize: 12, weight: .medium)
@@ -262,6 +277,17 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
     /// An SF Symbol (or asset catalog image) is tinted; a picture from the
     /// Flutter assets, a file or the network keeps its colours, as an avatar.
     private func image(for item: [String: Any], selected: Bool, index: Int) -> UIImage? {
+        // Bytes from Flutter (an avatar the app already has), before the
+        // symbol that stands in for them.
+        if let data = (item["image"] as? FlutterStandardTypedData)?.data {
+            let key = Self.cacheKey(for: data)
+            if let cached = imageCache[key] { return cached }
+            if let picture = UIImage(data: data) {
+                let avatar = Self.avatar(picture)
+                imageCache[key] = avatar
+                return avatar
+            }
+        }
         let symbol = (selected ? item["selectedSymbol"] as? String : nil) ?? item["symbol"] as? String
         if let symbol = symbol, !symbol.isEmpty {
             return UIImage(systemName: symbol) ?? UIImage(named: symbol)
@@ -295,6 +321,14 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
                 self?.refreshAppearance()
             }
         }.resume()
+    }
+
+    /// A key for [data] that covers every byte: two photos from the same
+    /// camera share their first bytes, so a prefix would not do.
+    private static func cacheKey(for data: Data) -> String {
+        var hasher = Hasher()
+        data.withUnsafeBytes { hasher.combine(bytes: $0) }
+        return "bytes:\(data.count):\(hasher.finalize())"
     }
 
     private static func avatar(_ image: UIImage, side: CGFloat = 26) -> UIImage {

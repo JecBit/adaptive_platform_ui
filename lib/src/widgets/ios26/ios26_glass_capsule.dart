@@ -16,6 +16,7 @@ class GlassCapsuleItem {
     this.asset,
     this.file,
     this.network,
+    this.image,
     this.title,
     this.label,
     this.tint,
@@ -31,11 +32,13 @@ class GlassCapsuleItem {
     int menuIdBase = 0,
   }) => GlassCapsuleItem(
     symbol: action.iosSymbol,
+    image: action.iconImage,
     title: action.iosSymbol == null ? action.title : null,
     label: action.effectiveLabel,
     tint: action.tintColor,
     badge: action.badgeCount,
     fallback:
+        action.imageWidget ??
         action.iconWidget ??
         (action.icon != null ? Icon(action.icon, size: 22) : null),
     menu: action.hasMenu
@@ -93,6 +96,9 @@ class GlassCapsuleItem {
   final String? asset;
   final String? file;
   final String? network;
+
+  /// PNG or JPEG bytes shown round, as an avatar, in place of [symbol].
+  final Uint8List? image;
   final String? title;
 
   /// Accessibility label.
@@ -113,6 +119,7 @@ class GlassCapsuleItem {
       asset != null ||
       file != null ||
       network != null ||
+      image != null ||
       title != null;
 
   Map<String, dynamic> toNativeMap() => <String, dynamic>{
@@ -121,6 +128,7 @@ class GlassCapsuleItem {
     if (asset != null) 'asset': asset,
     if (file != null) 'file': file,
     if (network != null) 'network': network,
+    if (image != null) 'image': image,
     if (title != null) 'title': title,
     if (label != null) 'label': label,
     if (tint != null) 'tint': tint!.toARGB32(),
@@ -165,6 +173,7 @@ class IOS26GlassCapsule extends StatefulWidget {
     this.selectedIndex,
     this.inset = 0,
     this.tint,
+    this.showLabels = false,
   });
 
   final List<GlassCapsuleItem> items;
@@ -179,6 +188,17 @@ class IOS26GlassCapsule extends StatefulWidget {
 
   /// Tint of a selected tab, or of every item when there is no selection.
   final Color? tint;
+
+  /// Whether each item shows its [GlassCapsuleItem.label] under its icon, as
+  /// a navigation rail does. Give the capsule [labeledWidth] and
+  /// [labeledTabsHeight] for it.
+  final bool showLabels;
+
+  /// Width of a capsule that shows labels.
+  static const double labeledWidth = 72;
+
+  /// Height of a tab capsule of [count] labeled tabs, with [tabsInset].
+  static double labeledTabsHeight(int count) => tabsInset * 2 + count * 60.0;
 
   /// Width of every control in the trailing bar, as measured on the system's
   /// own bar.
@@ -210,6 +230,7 @@ class _IOS26GlassCapsuleState extends State<IOS26GlassCapsule> {
       'items': widget.items.map((i) => i.toNativeMap()).toList(),
       if (widget.selectedIndex != null) 'selectedIndex': widget.selectedIndex,
       'inset': widget.inset,
+      if (widget.showLabels) 'showLabels': true,
       'isDark': _isDark,
       if (tint != null) 'tint': tint.toARGB32(),
     };
@@ -334,16 +355,31 @@ class _IOS26GlassCapsuleState extends State<IOS26GlassCapsule> {
                       data: IconThemeData(
                         color: i == widget.selectedIndex ? tint : label,
                       ),
-                      child:
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           widget.items[i].fallback ??
-                          Text(
-                            widget.items[i].title ??
-                                widget.items[i].symbol ??
-                                widget.items[i].label ??
-                                '',
-                            style: TextStyle(fontSize: 10, color: label),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                              Text(
+                                widget.items[i].title ??
+                                    widget.items[i].symbol ??
+                                    widget.items[i].label ??
+                                    '',
+                                style: TextStyle(fontSize: 10, color: label),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          if (widget.showLabels &&
+                              widget.items[i].label != null)
+                            Text(
+                              widget.items[i].label!,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: i == widget.selectedIndex ? tint : label,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
