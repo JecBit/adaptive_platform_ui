@@ -362,6 +362,9 @@ class _IOS26GlassCapsuleState extends State<IOS26GlassCapsule> {
     // The native capsule tints a selected tab system blue unless it is told
     // otherwise, not with the app's primary color.
     final tint = widget.tint ?? CupertinoColors.systemBlue.resolveFrom(context);
+    // With no selection (a capsule of actions) the native one leaves the
+    // controls in the label color unless told otherwise: blue is for a tab.
+    final restingTint = widget.tint ?? label;
     final dark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -389,7 +392,15 @@ class _IOS26GlassCapsuleState extends State<IOS26GlassCapsule> {
                 child: Column(
                   children: [
                     for (var i = 0; i < widget.items.length; i++)
-                      Expanded(child: _fallbackCell(i, width, label, tint)),
+                      Expanded(
+                        child: _fallbackCell(
+                          i,
+                          width,
+                          label,
+                          tint,
+                          restingTint,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -400,11 +411,17 @@ class _IOS26GlassCapsuleState extends State<IOS26GlassCapsule> {
     );
   }
 
-  Widget _fallbackCell(int i, double width, Color label, Color tint) {
+  Widget _fallbackCell(
+    int i,
+    double width,
+    Color label,
+    Color tint,
+    Color restingTint,
+  ) {
     final item = widget.items[i];
     final selected = i == widget.selectedIndex;
     final color = widget.selectedIndex == null
-        ? (item.tint ?? tint)
+        ? (item.tint ?? restingTint)
         : (selected ? (item.tint ?? tint) : label);
     final badge = item.badge;
     return GestureDetector(

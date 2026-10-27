@@ -618,6 +618,21 @@ void main() {
       expect(home.data.color, CupertinoColors.systemBlue);
     }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
+    testWidgets('leaves the controls of a capsule without a selection in the '
+        'label color, not blue', (tester) async {
+      await pumpCapsule(tester, selectedIndex: null);
+
+      final home = tester.widget<IconTheme>(
+        find
+            .ancestor(
+              of: find.byKey(const ValueKey('home')),
+              matching: find.byType(IconTheme),
+            )
+            .first,
+      );
+      expect(home.data.color, isNot(CupertinoColors.systemBlue));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
     testWidgets('and with the tint it is given', (tester) async {
       await pumpCapsule(tester, tint: const Color(0xFF123456));
 
