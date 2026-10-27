@@ -359,7 +359,9 @@ class _IOS26GlassCapsuleState extends State<IOS26GlassCapsule> {
   /// the selected one highlighted, as the native view lays them out.
   Widget _buildFallback() {
     final label = CupertinoColors.label.resolveFrom(context);
-    final tint = widget.tint ?? CupertinoTheme.of(context).primaryColor;
+    // The native capsule tints a selected tab system blue unless it is told
+    // otherwise, not with the app's primary color.
+    final tint = widget.tint ?? CupertinoColors.systemBlue.resolveFrom(context);
     final dark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -404,38 +406,93 @@ class _IOS26GlassCapsuleState extends State<IOS26GlassCapsule> {
     final color = widget.selectedIndex == null
         ? (item.tint ?? tint)
         : (selected ? (item.tint ?? tint) : label);
+    final badge = item.badge;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => widget.onTap(i),
-      child: Padding(
-        // As the native highlight: 6 narrower than the capsule.
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: DecoratedBox(
-          key: selected ? IOS26GlassCapsule.fallbackSelectionKey : null,
-          decoration: BoxDecoration(
-            color: selected ? label.withValues(alpha: 0.1) : null,
-            borderRadius: BorderRadius.circular(width / 2),
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Padding(
+            // As the native highlight: 6 narrower than the capsule.
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: DecoratedBox(
+              key: selected ? IOS26GlassCapsule.fallbackSelectionKey : null,
+              decoration: BoxDecoration(
+                color: selected ? label.withValues(alpha: 0.1) : null,
+                borderRadius: BorderRadius.circular(width / 2),
+              ),
+              child: Center(
+                child: IconTheme.merge(
+                  data: IconThemeData(color: color),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      item.fallback ??
+                          Text(
+                            item.title ?? item.symbol ?? item.label ?? '',
+                            style: TextStyle(fontSize: 10, color: label),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      if (widget.showLabels && item.label != null)
+                        Text(
+                          item.label!,
+                          style: TextStyle(fontSize: 10, color: color),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
+          if (badge != null && badge > 0)
+            // As the native badge: 11 to the right of the cell's center and 12
+            // above it, over the glass.
+            Transform.translate(
+              offset: const Offset(11, -12),
+              child: _FallbackBadge(count: badge),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The count on an item of the capsule drawn by Flutter: the native one is a
+/// red pill, 18 tall, with the count capped at "99+".
+class _FallbackBadge extends StatelessWidget {
+  const _FallbackBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = count > 99 ? '99+' : '$count';
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: CupertinoColors.systemRed,
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
           child: Center(
-            child: IconTheme.merge(
-              data: IconThemeData(color: color),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  item.fallback ??
-                      Text(
-                        item.title ?? item.symbol ?? item.label ?? '',
-                        style: TextStyle(fontSize: 10, color: label),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                  if (widget.showLabels && item.label != null)
-                    Text(
-                      item.label!,
-                      style: TextStyle(fontSize: 10, color: color),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
+            widthFactor: 1,
+            heightFactor: 1,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                text,
+                style: const TextStyle(
+                  color: CupertinoColors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                  decoration: TextDecoration.none,
+                ),
               ),
             ),
           ),

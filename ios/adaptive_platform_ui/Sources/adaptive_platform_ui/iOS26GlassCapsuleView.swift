@@ -32,6 +32,26 @@ class iOS26GlassCapsuleFactory: NSObject, FlutterPlatformViewFactory {
     }
 }
 
+// MARK: - Lens gesture recognizer
+
+/// A pan that remembers where the finger first touched down: whether the lens
+/// is being taken is decided there, not where the finger is once it has moved.
+private final class LensPanRecognizer: UIPanGestureRecognizer {
+    private(set) var touchDownLocation: CGPoint?
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        if let view = view, let touch = touches.first, numberOfTouches == 0 {
+            touchDownLocation = touch.location(in: view)
+        }
+        super.touchesBegan(touches, with: event)
+    }
+
+    override func reset() {
+        super.reset()
+        touchDownLocation = nil
+    }
+}
+
 // MARK: - Container
 private class GlassCapsuleContainer: UIView {
     var onLayout: (() -> Void)?
@@ -63,7 +83,7 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
 
     // The selection highlight as a lens that can be taken and dragged along
     // the tabs, as on the iOS 26 tab bar.
-    private let lensPan = UIPanGestureRecognizer()
+    private let lensPan = LensPanRecognizer()
     private let lensFeedback = UISelectionFeedbackGenerator()
     private var lensDragging = false
     private var lensNearest: Int?
@@ -499,7 +519,7 @@ extension iOS26GlassCapsuleView: UIGestureRecognizerDelegate {
         guard gestureRecognizer === lensPan,
               let selected = selectedIndex, selected < buttons.count,
               !selectionView.isHidden else { return false }
-        let point = gestureRecognizer.location(in: effectView.contentView)
+        let point = lensPan.touchDownLocation ?? gestureRecognizer.location(in: effectView.contentView)
         return selectionView.frame.insetBy(dx: -6, dy: -6).contains(point)
     }
 }

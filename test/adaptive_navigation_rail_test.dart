@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:adaptive_platform_ui/src/widgets/ios26/ios26_glass_capsule.dart';
+import 'package:flutter/cupertino.dart' show CupertinoColors;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -510,5 +511,125 @@ void main() {
       );
       expect(tester.getSize(find.byType(AdaptiveActionCapsule)).height, 44);
     });
+  });
+
+  group('the capsule drawn by Flutter looks like the native one', () {
+    Future<void> pumpCapsule(
+      WidgetTester tester, {
+      Color? tint,
+      int? selectedIndex = 0,
+    }) => tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: IOS26GlassCapsule.width,
+            height: 200,
+            child: IOS26GlassCapsule(
+              items: const [
+                GlassCapsuleItem(
+                  symbol: 'house',
+                  label: 'Home',
+                  fallback: Icon(Icons.home, key: ValueKey('home')),
+                ),
+                GlassCapsuleItem(
+                  symbol: 'list',
+                  label: 'History',
+                  badge: 3,
+                  fallback: Icon(Icons.list, key: ValueKey('history')),
+                ),
+              ],
+              selectedIndex: selectedIndex,
+              tint: tint,
+              native: false,
+              onTap: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('draws the count of an item as a red badge', (tester) async {
+      await pumpCapsule(tester);
+
+      expect(find.text('3'), findsOneWidget);
+      final badge = tester.widget<DecoratedBox>(
+        find
+            .ancestor(of: find.text('3'), matching: find.byType(DecoratedBox))
+            .first,
+      );
+      expect(
+        (badge.decoration as BoxDecoration).color,
+        CupertinoColors.systemRed,
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('is a pill about 18 tall, not as tall as its cell', (
+      tester,
+    ) async {
+      await pumpCapsule(tester);
+
+      final badge = find
+          .ancestor(of: find.text('3'), matching: find.byType(DecoratedBox))
+          .first;
+      // 18 with the system font; the test font's glyphs are a little larger.
+      expect(tester.getSize(badge).height, inInclusiveRange(18, 22));
+      expect(tester.getSize(badge).width, inInclusiveRange(18, 22));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('caps a large count at 99+, as the native one does', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: IOS26GlassCapsule.width,
+            height: 100,
+            child: IOS26GlassCapsule(
+              items: const [
+                GlassCapsuleItem(
+                  symbol: 'bell',
+                  badge: 150,
+                  fallback: Icon(Icons.notifications),
+                ),
+              ],
+              native: false,
+              onTap: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('99+'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('tints the selected item system blue unless told otherwise', (
+      tester,
+    ) async {
+      await pumpCapsule(tester);
+
+      final home = tester.widget<IconTheme>(
+        find
+            .ancestor(
+              of: find.byKey(const ValueKey('home')),
+              matching: find.byType(IconTheme),
+            )
+            .first,
+      );
+      expect(home.data.color, CupertinoColors.systemBlue);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('and with the tint it is given', (tester) async {
+      await pumpCapsule(tester, tint: const Color(0xFF123456));
+
+      final home = tester.widget<IconTheme>(
+        find
+            .ancestor(
+              of: find.byKey(const ValueKey('home')),
+              matching: find.byType(IconTheme),
+            )
+            .first,
+      );
+      expect(home.data.color, const Color(0xFF123456));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
   });
 }
