@@ -197,4 +197,136 @@ void main() {
       expect(it.showLabels, isFalse);
     });
   });
+
+  group('AdaptiveNavigationRail leading, footer and anchors', () {
+    final destinationKeys = [for (var i = 0; i < 3; i++) GlobalKey()];
+    final actionKeys = [GlobalKey(), GlobalKey()];
+    final actions = [
+      AdaptiveAppBarAction(
+        iosSymbol: 'bell',
+        icon: Icons.notifications_outlined,
+        label: 'Notifications',
+        onPressed: () {},
+      ),
+      AdaptiveAppBarAction(
+        iosSymbol: 'person.crop.circle',
+        icon: Icons.person_outline,
+        label: 'My profile',
+        onPressed: () {},
+      ),
+    ];
+
+    Future<void> pumpRail(WidgetTester tester, {double height = 900}) {
+      tester.view.physicalSize = Size(800, height);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      return tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Row(
+              children: [
+                AdaptiveNavigationRail(
+                  destinations: _destinations,
+                  selectedIndex: 0,
+                  onDestinationSelected: (_) {},
+                  actions: actions,
+                  margin: 4,
+                  leading: const Text('Logo'),
+                  leadingExtent: 40,
+                  footer: const Text('Share'),
+                  footerExtent: 48,
+                  destinationKeys: destinationKeys,
+                  actionKeys: actionKeys,
+                ),
+                const Expanded(child: SizedBox.expand()),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('off iOS 26 the Material rail shows them and carries the '
+        'keys', (tester) async {
+      await pumpRail(tester);
+
+      expect(find.text('Logo'), findsOneWidget);
+      expect(find.text('Share'), findsOneWidget);
+      for (final key in [...destinationKeys, ...actionKeys]) {
+        expect(find.byKey(key), findsOneWidget);
+      }
+    });
+
+    group('on the glass rail', () {
+      setUp(() => AdaptiveNavigationRail.debugForceGlass = true);
+      tearDown(() => AdaptiveNavigationRail.debugForceGlass = null);
+
+      testWidgets('the logo sits above the destinations and the footer '
+          'above the actions', (tester) async {
+        await pumpRail(tester);
+
+        final logo = tester.getRect(find.text('Logo'));
+        final share = tester.getRect(find.text('Share'));
+        final firstDestination = tester.getRect(find.byKey(destinationKeys[0]));
+        final firstAction = tester.getRect(find.byKey(actionKeys[0]));
+        expect(logo.bottom, lessThanOrEqualTo(firstDestination.top));
+        expect(share.bottom, lessThanOrEqualTo(firstAction.top));
+      }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+      testWidgets('each destination and action has an anchor over its cell, '
+          'in order', (tester) async {
+        await pumpRail(tester);
+
+        final rects = [
+          for (final key in destinationKeys) tester.getRect(find.byKey(key)),
+        ];
+        for (var i = 1; i < rects.length; i++) {
+          expect(rects[i].top, greaterThanOrEqualTo(rects[i - 1].bottom));
+          expect(rects[i].height, rects[0].height);
+        }
+        expect(
+          tester.getRect(find.byKey(actionKeys[1])).top,
+          greaterThanOrEqualTo(
+            tester.getRect(find.byKey(actionKeys[0])).bottom,
+          ),
+        );
+      }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+      testWidgets('the rail is the capsule plus the margins wide', (
+        tester,
+      ) async {
+        await pumpRail(tester);
+
+        expect(
+          tester.getSize(find.byType(AdaptiveNavigationRail)).width,
+          IOS26GlassCapsule.labeledWidth + 4 * 2,
+        );
+      }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+      testWidgets('with the actions folded, their anchors are gone', (
+        tester,
+      ) async {
+        // With three destinations, the logo and the footer, 330 of column
+        // (338 less the margins) only fits the folded actions.
+        await pumpRail(tester, height: 338);
+
+        expect(find.byKey(actionKeys[0]), findsNothing);
+        expect(find.byKey(actionKeys[1]), findsNothing);
+        expect(find.byKey(destinationKeys[0]), findsOneWidget);
+      }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+    });
+  });
+
+  test('planFor counts the leading and the footer', () {
+    RailPlan plan(double fixed) => AdaptiveNavigationRail.planFor(
+      height: 500,
+      destinationCount: 5,
+      actionCount: 2,
+      showLabels: true,
+      fixedExtent: fixed,
+    );
+    // 312 of labeled tabs, 8 of gap and 100 of actions: 420.
+    expect(plan(80).showLabels, isTrue);
+    expect(plan(81).showLabels, isFalse);
+  });
 }

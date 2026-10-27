@@ -14,10 +14,10 @@ typedef RailPlan = ({bool showLabels, bool foldActions});
 /// to give one: an iPad, a phone turned sideways.
 ///
 /// - **iOS 26+**: native Liquid Glass. The destinations are one glass capsule,
-///   with the selected one highlighted and, by default, its label under each
-///   icon; the [actions] are a second capsule at the foot. Both are the
-///   capsules of the iPhone Duo bar ([IOS26GlassCapsule]), laid out by the app
-///   instead of the system.
+///   with the selected one highlighted (it can be taken and dragged to another
+///   destination) and, by default, its label under each icon; the [actions]
+///   are a second capsule at the foot. Both are the capsules of the iPhone Duo
+///   bar ([IOS26GlassCapsule]), laid out by the app instead of the system.
 /// - **Everywhere else**: a Material [NavigationRail], with the [actions] at
 ///   its foot.
 ///
@@ -32,7 +32,18 @@ class AdaptiveNavigationRail extends StatelessWidget {
     this.actions = const [],
     this.showLabels = true,
     this.tint,
-  });
+    this.margin = defaultMargin,
+    this.leading,
+    this.leadingExtent = 0,
+    this.footer,
+    this.footerExtent = 0,
+    this.destinationKeys,
+    this.actionKeys,
+  }) : assert(
+         destinationKeys == null ||
+             destinationKeys.length == destinations.length,
+       ),
+       assert(actionKeys == null || actionKeys.length == actions.length);
 
   /// The destinations, top to bottom. SF Symbol names, [IconData] and
   /// [ImageProvider]s work as icons, as in [AdaptiveBottomNavigationBar].
@@ -55,32 +66,58 @@ class AdaptiveNavigationRail extends StatelessWidget {
   /// Tint of the selected destination.
   final Color? tint;
 
-  /// Margin between the capsules and the window's edges.
-  static const double margin = 12;
+  /// Space between the capsules and the window's edges.
+  final double margin;
 
-  /// Width the rail takes, margins included.
-  static double widthFor({bool showLabels = true}) =>
+  /// A widget above the destinations, such as the app's logo, given
+  /// [leadingExtent] of height.
+  final Widget? leading;
+  final double leadingExtent;
+
+  /// A widget above the actions, given [footerExtent] of height: for a control
+  /// that has to stay a Flutter widget.
+  final Widget? footer;
+  final double footerExtent;
+
+  /// One key per destination, placed on an empty box over its cell (on the
+  /// Material rail, on its icon): for a menu that opens beside a destination,
+  /// or a guided tour, to find where it is.
+  final List<Key>? destinationKeys;
+
+  /// The same for the [actions]. While they are folded into one control (see
+  /// [planFor]) there is no cell to put them on, and they are left out.
+  final List<Key>? actionKeys;
+
+  /// Default for [margin].
+  static const double defaultMargin = 12;
+
+  /// Forces the glass rail (true) or the Material one (false) regardless of
+  /// the platform, for tests.
+  @visibleForTesting
+  static bool? debugForceGlass;
+
+  /// Width the glass rail takes, margins included.
+  static double widthFor({
+    bool showLabels = true,
+    double margin = defaultMargin,
+  }) =>
       (showLabels ? IOS26GlassCapsule.labeledWidth : IOS26GlassCapsule.width) +
       margin * 2;
 
-  @override
-  Widget build(BuildContext context) {
-    if (PlatformInfo.isIOS26OrHigher()) return _buildGlass(context);
-    return _buildMaterial(context);
-  }
-
-  /// Least space kept between the destinations and the actions.
+  /// Least space kept between the destinations and what is below them.
   static const double _gap = 8;
 
-  /// How the rail fits a column [height] tall: as asked for when there is
-  /// room; otherwise without labels; then with the actions folded into one
-  /// control that opens a menu of them (a phone turned sideways is about 345
-  /// pt tall once the safe area and margins are taken).
+  /// How the rail fits a column [height] tall, of which [fixedExtent] is
+  /// taken by other things (a leading widget, a footer): as asked for when
+  /// there is room; otherwise without labels; then with the actions folded
+  /// into one control that opens a menu of them (a phone turned sideways is
+  /// about 345 pt tall once the safe area and margins are taken).
   static RailPlan planFor({
     required double height,
     required int destinationCount,
     required int actionCount,
     required bool showLabels,
+    double fixedExtent = 0,
   }) {
     double tabs(bool labels) => labels
         ? IOS26GlassCapsule.labeledTabsHeight(destinationCount)
@@ -98,11 +135,45 @@ class AdaptiveNavigationRail extends StatelessWidget {
       ],
     ];
     for (final option in options) {
-      if (tabs(option.showLabels) + foot(option.foldActions) <= height) {
+      if (fixedExtent + tabs(option.showLabels) + foot(option.foldActions) <=
+          height) {
         return option;
       }
     }
     return options.last;
+  }
+
+  bool get _useGlass => debugForceGlass ?? PlatformInfo.isIOS26OrHigher();
+
+  @override
+  Widget build(BuildContext context) {
+    if (_useGlass) return _buildGlass(context);
+    return _buildMaterial(context);
+  }
+
+  /// [capsule] with an empty, untouchable box keyed with each of [keys] over
+  /// its cells, which the capsule spreads evenly between its insets.
+  Widget _withAnchors(Widget capsule, List<Key>? keys, {double inset = 0}) {
+    if (keys == null) return capsule;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        capsule,
+        IgnorePointer(
+          child: ExcludeSemantics(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: inset),
+              child: Column(
+                children: [
+                  for (final key in keys)
+                    Expanded(child: SizedBox.expand(key: key)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildGlass(BuildContext context) {
@@ -110,11 +181,12 @@ class AdaptiveNavigationRail extends StatelessWidget {
     // the folded actions come back as `foldedId + index`.
     const menuStride = 1000;
     const foldedId = 1000000;
+    final hasFooter = footer != null;
 
     return SafeArea(
       right: false,
       child: Padding(
-        padding: const EdgeInsets.all(margin),
+        padding: EdgeInsets.all(margin),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final plan = planFor(
@@ -122,6 +194,9 @@ class AdaptiveNavigationRail extends StatelessWidget {
               destinationCount: destinations.length,
               actionCount: actions.length,
               showLabels: showLabels,
+              fixedExtent:
+                  (leading == null ? 0 : leadingExtent) +
+                  (hasFooter ? footerExtent + _gap : 0),
             );
             final width = plan.showLabels
                 ? IOS26GlassCapsule.labeledWidth
@@ -138,21 +213,37 @@ class AdaptiveNavigationRail extends StatelessWidget {
               width: width,
               child: Column(
                 children: [
+                  if (leading != null)
+                    SizedBox(
+                      height: leadingExtent,
+                      child: Center(child: leading),
+                    ),
                   SizedBox(
                     height: tabsHeight,
-                    child: IOS26GlassCapsule(
-                      items: [
-                        for (final destination in destinations)
-                          GlassCapsuleItem.fromDestination(destination),
-                      ],
-                      selectedIndex: selectedIndex,
+                    child: _withAnchors(
+                      IOS26GlassCapsule(
+                        items: [
+                          for (final destination in destinations)
+                            GlassCapsuleItem.fromDestination(destination),
+                        ],
+                        selectedIndex: selectedIndex,
+                        inset: IOS26GlassCapsule.tabsInset,
+                        showLabels: plan.showLabels,
+                        tint: tint,
+                        onTap: onDestinationSelected,
+                      ),
+                      destinationKeys,
                       inset: IOS26GlassCapsule.tabsInset,
-                      showLabels: plan.showLabels,
-                      tint: tint,
-                      onTap: onDestinationSelected,
                     ),
                   ),
                   const Spacer(),
+                  if (hasFooter) ...[
+                    SizedBox(
+                      height: footerExtent,
+                      child: Center(child: footer),
+                    ),
+                    const SizedBox(height: _gap),
+                  ],
                   if (actions.isNotEmpty && plan.foldActions)
                     SizedBox(
                       height: IOS26GlassCapsule.actionsHeight(1),
@@ -180,17 +271,20 @@ class AdaptiveNavigationRail extends StatelessWidget {
                   else if (actions.isNotEmpty)
                     SizedBox(
                       height: IOS26GlassCapsule.actionsHeight(actions.length),
-                      child: IOS26GlassCapsule(
-                        items: [
-                          for (var i = 0; i < actions.length; i++)
-                            GlassCapsuleItem.fromAction(
-                              actions[i],
-                              menuIdBase: i * menuStride,
-                            ),
-                        ],
-                        onTap: (i) => actions[i].press(context),
-                        onMenuTap: (id) => actions[id ~/ menuStride]
-                            .selectMenuItem(id % menuStride),
+                      child: _withAnchors(
+                        IOS26GlassCapsule(
+                          items: [
+                            for (var i = 0; i < actions.length; i++)
+                              GlassCapsuleItem.fromAction(
+                                actions[i],
+                                menuIdBase: i * menuStride,
+                              ),
+                          ],
+                          onTap: (i) => actions[i].press(context),
+                          onMenuTap: (id) => actions[id ~/ menuStride]
+                              .selectMenuItem(id % menuStride),
+                        ),
+                        actionKeys,
                       ),
                     ),
                 ],
@@ -212,6 +306,8 @@ class AdaptiveNavigationRail extends StatelessWidget {
       // An SF Symbol name: nothing to draw it with here.
       _ => const Icon(Icons.circle_outlined),
     };
+    Widget keyed(Key? key, Widget child) =>
+        key == null ? child : KeyedSubtree(key: key, child: child);
 
     return NavigationRail(
       selectedIndex: selectedIndex,
@@ -219,34 +315,44 @@ class AdaptiveNavigationRail extends StatelessWidget {
       labelType: showLabels
           ? NavigationRailLabelType.all
           : NavigationRailLabelType.none,
+      leading: leading,
       destinations: [
-        for (final destination in destinations)
+        for (var i = 0; i < destinations.length; i++)
           NavigationRailDestination(
-            icon: iconOf(destination.icon),
-            selectedIcon: destination.selectedIcon == null
-                ? null
-                : iconOf(destination.selectedIcon),
-            label: Text(destination.label),
+            // Only one of the two icons is built at a time, so a key is never
+            // twice in the tree.
+            icon: keyed(destinationKeys?[i], iconOf(destinations[i].icon)),
+            selectedIcon: keyed(
+              destinationKeys?[i],
+              iconOf(destinations[i].selectedIcon ?? destinations[i].icon),
+            ),
+            label: Text(destinations[i].label),
           ),
       ],
-      trailing: actions.isEmpty
+      trailing: actions.isEmpty && footer == null
           ? null
           : Expanded(
               child: Align(
                 alignment: Alignment.bottomCenter,
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: margin),
+                  padding: EdgeInsets.only(bottom: margin),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      for (final action in actions)
-                        IconButton(
-                          tooltip: action.effectiveLabel,
-                          onPressed: () => action.press(context),
-                          icon: action.wrapWithBadge(
-                            action.imageWidget ??
-                                action.iconWidget ??
-                                Icon(action.icon ?? Icons.circle_outlined),
+                      ?footer,
+                      for (var i = 0; i < actions.length; i++)
+                        keyed(
+                          actionKeys?[i],
+                          IconButton(
+                            tooltip: actions[i].effectiveLabel,
+                            onPressed: () => actions[i].press(context),
+                            icon: actions[i].wrapWithBadge(
+                              actions[i].imageWidget ??
+                                  actions[i].iconWidget ??
+                                  Icon(
+                                    actions[i].icon ?? Icons.circle_outlined,
+                                  ),
+                            ),
                           ),
                         ),
                     ],

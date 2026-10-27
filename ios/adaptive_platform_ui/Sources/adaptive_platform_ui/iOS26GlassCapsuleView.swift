@@ -61,6 +61,13 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
     private var stackBottom: NSLayoutConstraint?
     private var imageCache: [String: UIImage] = [:]
 
+    // The selection highlight as a lens that can be taken and dragged along
+    // the tabs, as on the iOS 26 tab bar.
+    private let lensPan = UIPanGestureRecognizer()
+    private let lensFeedback = UISelectionFeedbackGenerator()
+    private var lensDragging = false
+    private var lensNearest: Int?
+
     init(
         frame: CGRect,
         viewIdentifier viewId: Int64,
@@ -113,7 +120,14 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
             bottom,
         ])
 
-        container.onLayout = { [weak self] in self?.layoutChrome(animated: false) }
+        container.onLayout = { [weak self] in
+            guard let self = self, !self.lensDragging else { return }
+            self.layoutChrome(animated: false)
+        }
+
+        lensPan.addTarget(self, action: #selector(lensDragged(_:)))
+        lensPan.delegate = self
+        effectView.contentView.addGestureRecognizer(lensPan)
 
         if let params = args as? [String: Any] {
             apply(params)
@@ -363,11 +377,15 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
         }
         let button = buttons[selected]
         guard selectionAnchor !== button else { return }
+        anchorSelection(to: button, animated: animated)
+    }
+
+    /// Ties the highlight to [button]. It follows it through constraints, so
+    /// it is right on every layout pass, not only the one it was set in.
+    private func anchorSelection(to button: UIButton, animated: Bool) {
         let wasVisible = !selectionView.isHidden && selectionAnchor != nil
         selectionAnchor = button
 
-        // The highlight follows the selected button through constraints, so
-        // it is right on every layout pass, not only the one it was set in.
         NSLayoutConstraint.deactivate(selectionConstraints)
         selectionView.translatesAutoresizingMaskIntoConstraints = false
         selectionConstraints = [
@@ -384,7 +402,78 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
                 withDuration: 0.35, delay: 0,
                 usingSpringWithDamping: 0.8, initialSpringVelocity: 0,
                 options: [.beginFromCurrentState],
-                animations: { self.effectView.contentView.layoutIfNeeded() })
+                animations: {
+                    self.selectionView.transform = .identity
+                    self.effectView.contentView.layoutIfNeeded()
+                })
+        } else {
+            selectionView.transform = .identity
+        }
+    }
+
+    // MARK: Lens
+
+    /// The tab nearest to [y], in the content view's coordinates.
+    private func nearestButton(to y: CGFloat) -> Int? {
+        guard !buttons.isEmpty else { return nil }
+        let content = effectView.contentView
+        return buttons.indices.min { a, b in
+            let ya = buttons[a].convert(buttons[a].bounds, to: content).midY
+            let yb = buttons[b].convert(buttons[b].bounds, to: content).midY
+            return abs(ya - y) < abs(yb - y)
+        }
+    }
+
+    @objc private func lensDragged(_ pan: UIPanGestureRecognizer) {
+        let content = effectView.contentView
+        let y = pan.location(in: content).y
+        switch pan.state {
+        case .began:
+            lensDragging = true
+            lensNearest = selectedIndex
+            lensFeedback.prepare()
+            // Free the highlight from its button and let it follow the finger.
+            let frame = selectionView.frame
+            NSLayoutConstraint.deactivate(selectionConstraints)
+            selectionConstraints = []
+            selectionAnchor = nil
+            selectionView.translatesAutoresizingMaskIntoConstraints = true
+            selectionView.frame = frame
+            UIView.animate(
+                withDuration: 0.25, delay: 0,
+                usingSpringWithDamping: 0.7, initialSpringVelocity: 0,
+                options: [.beginFromCurrentState],
+                animations: {
+                    self.selectionView.transform = CGAffineTransform(scaleX: 1.12, y: 1.12)
+                })
+        case .changed:
+            guard let first = buttons.first, let last = buttons.last else { return }
+            let top = first.convert(first.bounds, to: content).midY
+            let bottom = last.convert(last.bounds, to: content).midY
+            selectionView.center.y = min(max(y, top), bottom)
+            let nearest = nearestButton(to: selectionView.center.y)
+            if nearest != lensNearest {
+                lensNearest = nearest
+                lensFeedback.selectionChanged()
+            }
+        case .ended, .cancelled, .failed:
+            lensDragging = false
+            guard let target = nearestButton(to: selectionView.center.y) else { return }
+            // Settle on the tab it was let go over and report it, as a tap.
+            anchorSelection(to: buttons[target], animated: true)
+            if pan.state == .ended && target != selectedIndex {
+                channel.invokeMethod("onItemTapped", arguments: ["index": target])
+                // A tab that opens something else instead of being selected
+                // leaves the selection where it was: go back to it.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+                    guard let self = self, !self.lensDragging else { return }
+                    self.layoutChrome(animated: true)
+                }
+            } else {
+                layoutChrome(animated: true)
+            }
+        default:
+            break
         }
     }
 
@@ -398,5 +487,19 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
         let g = CGFloat((argb >> 8) & 0xFF) / 255.0
         let b = CGFloat(argb & 0xFF) / 255.0
         return UIColor(red: r, green: g, blue: b, alpha: a)
+    }
+}
+
+// MARK: - Lens gesture
+
+extension iOS26GlassCapsuleView: UIGestureRecognizerDelegate {
+    /// The lens is taken from the selected tab only, so a drag elsewhere, or
+    /// any drag on a capsule of actions, is not one.
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === lensPan,
+              let selected = selectedIndex, selected < buttons.count,
+              !selectionView.isHidden else { return false }
+        let point = gestureRecognizer.location(in: effectView.contentView)
+        return selectionView.frame.insetBy(dx: -6, dy: -6).contains(point)
     }
 }
