@@ -315,6 +315,19 @@ void main() {
         expect(find.byKey(actionKeys[1]), findsNothing);
         expect(find.byKey(destinationKeys[0]), findsOneWidget);
       }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+      testWidgets('the folded actions are one round button, as wide as tall', (
+        tester,
+      ) async {
+        await pumpRail(tester, height: 360);
+
+        final size = tester.getSize(
+          find.byWidgetPredicate(
+            (w) => w is IOS26GlassCapsule && w.items.length == 1,
+          ),
+        );
+        expect(size.width, size.height);
+      }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
     });
   });
 

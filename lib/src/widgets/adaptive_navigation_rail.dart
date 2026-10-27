@@ -221,7 +221,10 @@ class AdaptiveNavigationRail extends StatelessWidget {
                     const SizedBox(height: _gap),
                   ],
                   if (actions.isNotEmpty && plan.foldActions)
+                    // One round button, whatever the width of the capsules
+                    // above it (labeled tabs are wider than the action cells).
                     SizedBox(
+                      width: IOS26GlassCapsule.width,
                       height: AdaptiveActionCapsule.heightFor(1),
                       child: IOS26GlassCapsule(
                         items: [
