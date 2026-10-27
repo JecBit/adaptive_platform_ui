@@ -329,4 +329,135 @@ void main() {
     expect(plan(80).showLabels, isTrue);
     expect(plan(81).showLabels, isFalse);
   });
+
+  group('drawn by Flutter (native: false)', () {
+    testWidgets('a capsule keeps its layout without the native view', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: SizedBox(
+              width: IOS26GlassCapsule.width,
+              height: 300,
+              child: IOS26GlassCapsule(
+                items: const [
+                  GlassCapsuleItem(symbol: 'house', label: 'Home'),
+                  GlassCapsuleItem(symbol: 'bubble.left', label: 'Chat'),
+                ],
+                selectedIndex: 1,
+                native: false,
+                onTap: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(UiKitView), findsNothing);
+      expect(
+        find.byKey(IOS26GlassCapsule.fallbackSelectionKey),
+        findsOneWidget,
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('the tab capsule shows the fallback icons it is given, with '
+        'an anchor per tab, at the size of the native one', (tester) async {
+      final keys = [for (var i = 0; i < 3; i++) GlobalKey()];
+      final tapped = <int>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: AdaptiveTabCapsule(
+              destinations: _destinations,
+              selectedIndex: 0,
+              onDestinationSelected: tapped.add,
+              native: false,
+              destinationKeys: keys,
+              fallbackIcons: const [
+                Icon(Icons.home, key: ValueKey('home')),
+                Icon(Icons.chat, key: ValueKey('chat')),
+                Icon(Icons.history, key: ValueKey('history')),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(UiKitView), findsNothing);
+      expect(find.byKey(const ValueKey('chat')), findsOneWidget);
+      for (final key in keys) {
+        expect(find.byKey(key), findsOneWidget);
+      }
+      expect(
+        tester.getSize(find.byType(AdaptiveTabCapsule)),
+        Size(AdaptiveTabCapsule.widthFor(), AdaptiveTabCapsule.heightFor(3)),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('history')));
+      expect(tapped, [2]);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('the action capsule runs the action tapped', (tester) async {
+      var pressed = 0;
+      final key = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: AdaptiveActionCapsule(
+              actions: [
+                AdaptiveAppBarAction(
+                  iosSymbol: 'bell',
+                  icon: Icons.notifications_outlined,
+                  label: 'Notifications',
+                  onPressed: () => pressed++,
+                ),
+              ],
+              actionKeys: [key],
+              native: false,
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        tester.getSize(find.byType(AdaptiveActionCapsule)).height,
+        AdaptiveActionCapsule.heightFor(1),
+      );
+      await tester.tap(find.byIcon(Icons.notifications_outlined));
+      expect(pressed, 1);
+      expect(find.byKey(key), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('the rail keeps its capsules, drawn by Flutter', (
+      tester,
+    ) async {
+      AdaptiveNavigationRail.debugForceGlass = true;
+      addTearDown(() => AdaptiveNavigationRail.debugForceGlass = null);
+      final keys = [for (var i = 0; i < 3; i++) GlobalKey()];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Row(
+              children: [
+                AdaptiveNavigationRail(
+                  destinations: _destinations,
+                  selectedIndex: 0,
+                  onDestinationSelected: (_) {},
+                  native: false,
+                  destinationKeys: keys,
+                ),
+                const Expanded(child: SizedBox.expand()),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(UiKitView), findsNothing);
+      expect(find.byType(NavigationRail), findsNothing);
+      expect(find.byType(AdaptiveTabCapsule), findsOneWidget);
+      expect(find.byKey(keys[0]), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+  });
 }

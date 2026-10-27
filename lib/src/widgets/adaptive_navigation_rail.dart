@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../platform/platform_info.dart';
 import 'adaptive_app_bar_action.dart';
+import 'adaptive_glass_capsules.dart';
 import 'adaptive_scaffold.dart';
 import 'ios26/ios26_glass_capsule.dart';
 
@@ -39,6 +40,8 @@ class AdaptiveNavigationRail extends StatelessWidget {
     this.footerExtent = 0,
     this.destinationKeys,
     this.actionKeys,
+    this.native = true,
+    this.destinationFallbackIcons,
   }) : assert(
          destinationKeys == null ||
              destinationKeys.length == destinations.length,
@@ -87,6 +90,15 @@ class AdaptiveNavigationRail extends StatelessWidget {
   /// The same for the [actions]. While they are folded into one control (see
   /// [planFor]) there is no cell to put them on, and they are left out.
   final List<Key>? actionKeys;
+
+  /// Whether the capsules are native views. Off, they are drawn by Flutter
+  /// with the same layout, for a moment when a native view would be wrong
+  /// (under another route or a dimming overlay, in a hero flight).
+  final bool native;
+
+  /// What the capsules drawn by Flutter show for each destination, in place of
+  /// an SF Symbol they cannot draw.
+  final List<Widget>? destinationFallbackIcons;
 
   /// Default for [margin].
   static const double defaultMargin = 12;
@@ -151,35 +163,8 @@ class AdaptiveNavigationRail extends StatelessWidget {
     return _buildMaterial(context);
   }
 
-  /// [capsule] with an empty, untouchable box keyed with each of [keys] over
-  /// its cells, which the capsule spreads evenly between its insets.
-  Widget _withAnchors(Widget capsule, List<Key>? keys, {double inset = 0}) {
-    if (keys == null) return capsule;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        capsule,
-        IgnorePointer(
-          child: ExcludeSemantics(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: inset),
-              child: Column(
-                children: [
-                  for (final key in keys)
-                    Expanded(child: SizedBox.expand(key: key)),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildGlass(BuildContext context) {
-    // Each action's menu entries come back as `index * menuStride + entry`;
-    // the folded actions come back as `foldedId + index`.
-    const menuStride = 1000;
+    // The folded actions come back as `foldedId + index`.
     const foldedId = 1000000;
     final hasFooter = footer != null;
 
@@ -198,12 +183,9 @@ class AdaptiveNavigationRail extends StatelessWidget {
                   (leading == null ? 0 : leadingExtent) +
                   (hasFooter ? footerExtent + _gap : 0),
             );
-            final width = plan.showLabels
-                ? IOS26GlassCapsule.labeledWidth
-                : IOS26GlassCapsule.width;
-            final tabsHeight = plan.showLabels
-                ? IOS26GlassCapsule.labeledTabsHeight(destinations.length)
-                : IOS26GlassCapsule.tabsHeight(destinations.length);
+            final width = AdaptiveTabCapsule.widthFor(
+              showLabels: plan.showLabels,
+            );
             final badges = actions.fold<int>(
               0,
               (sum, action) => sum + (action.badgeCount ?? 0),
@@ -218,23 +200,15 @@ class AdaptiveNavigationRail extends StatelessWidget {
                       height: leadingExtent,
                       child: Center(child: leading),
                     ),
-                  SizedBox(
-                    height: tabsHeight,
-                    child: _withAnchors(
-                      IOS26GlassCapsule(
-                        items: [
-                          for (final destination in destinations)
-                            GlassCapsuleItem.fromDestination(destination),
-                        ],
-                        selectedIndex: selectedIndex,
-                        inset: IOS26GlassCapsule.tabsInset,
-                        showLabels: plan.showLabels,
-                        tint: tint,
-                        onTap: onDestinationSelected,
-                      ),
-                      destinationKeys,
-                      inset: IOS26GlassCapsule.tabsInset,
-                    ),
+                  AdaptiveTabCapsule(
+                    destinations: destinations,
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: onDestinationSelected,
+                    showLabels: plan.showLabels,
+                    tint: tint,
+                    native: native,
+                    destinationKeys: destinationKeys,
+                    fallbackIcons: destinationFallbackIcons,
                   ),
                   const Spacer(),
                   if (hasFooter) ...[
@@ -246,13 +220,14 @@ class AdaptiveNavigationRail extends StatelessWidget {
                   ],
                   if (actions.isNotEmpty && plan.foldActions)
                     SizedBox(
-                      height: IOS26GlassCapsule.actionsHeight(1),
+                      height: AdaptiveActionCapsule.heightFor(1),
                       child: IOS26GlassCapsule(
                         items: [
                           GlassCapsuleItem(
                             symbol: 'ellipsis',
                             label: 'More',
                             badge: badges,
+                            fallback: const Icon(Icons.more_horiz),
                             menu: [
                               for (var i = 0; i < actions.length; i++)
                                 GlassCapsuleMenuEntry(
@@ -263,29 +238,18 @@ class AdaptiveNavigationRail extends StatelessWidget {
                             ],
                           ),
                         ],
+                        native: native,
                         onTap: (_) {},
                         onMenuTap: (id) =>
                             actions[id - foldedId].press(context),
                       ),
                     )
                   else if (actions.isNotEmpty)
-                    SizedBox(
-                      height: IOS26GlassCapsule.actionsHeight(actions.length),
-                      child: _withAnchors(
-                        IOS26GlassCapsule(
-                          items: [
-                            for (var i = 0; i < actions.length; i++)
-                              GlassCapsuleItem.fromAction(
-                                actions[i],
-                                menuIdBase: i * menuStride,
-                              ),
-                          ],
-                          onTap: (i) => actions[i].press(context),
-                          onMenuTap: (id) => actions[id ~/ menuStride]
-                              .selectMenuItem(id % menuStride),
-                        ),
-                        actionKeys,
-                      ),
+                    AdaptiveActionCapsule(
+                      actions: actions,
+                      actionKeys: actionKeys,
+                      native: native,
+                      width: width,
                     ),
                 ],
               ),

@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -56,7 +58,11 @@ class GlassCapsuleItem {
 
   /// A tab. The icon may be an SF Symbol name, an asset path, or an
   /// [AssetImage], [FileImage] or [NetworkImage] (shown as a round avatar).
-  factory GlassCapsuleItem.fromDestination(AdaptiveNavigationDestination d) {
+  /// [fallback] replaces the icon drawn where the capsule is not native.
+  factory GlassCapsuleItem.fromDestination(
+    AdaptiveNavigationDestination d, {
+    Widget? fallback,
+  }) {
     String? symbolOf(Object? icon) =>
         icon is String && !icon.contains('/') ? icon : null;
     ImageProvider? imageOf(Object? icon) => icon is ImageProvider
@@ -76,18 +82,20 @@ class GlassCapsuleItem {
       network: image is NetworkImage ? image.url : null,
       label: d.label,
       badge: d.badgeCount,
-      fallback: icon is IconData
-          ? Icon(icon, size: 22)
-          : image != null
-          ? ClipOval(
-              child: Image(
-                image: image,
-                width: 26,
-                height: 26,
-                fit: BoxFit.cover,
-              ),
-            )
-          : null,
+      fallback:
+          fallback ??
+          (icon is IconData
+              ? Icon(icon, size: 22)
+              : image != null
+              ? ClipOval(
+                  child: Image(
+                    image: image,
+                    width: 26,
+                    height: 26,
+                    fit: BoxFit.cover,
+                  ),
+                )
+              : null),
     );
   }
 
@@ -174,6 +182,7 @@ class IOS26GlassCapsule extends StatefulWidget {
     this.inset = 0,
     this.tint,
     this.showLabels = false,
+    this.native = true,
   });
 
   final List<GlassCapsuleItem> items;
@@ -193,6 +202,17 @@ class IOS26GlassCapsule extends StatefulWidget {
   /// a navigation rail does. Give the capsule [labeledWidth] and
   /// [labeledTabsHeight] for it.
   final bool showLabels;
+
+  /// Whether the capsule is the native view. Off, it is drawn by Flutter with
+  /// the same layout, for a moment when a native view would be wrong (under
+  /// another route or a dimming overlay, in a hero flight).
+  final bool native;
+
+  /// On the selected item of the capsule drawn by Flutter.
+  @visibleForTesting
+  static const Key fallbackSelectionKey = ValueKey(
+    'ios26_glass_capsule_fallback_selection',
+  );
 
   /// Width of a capsule that shows labels.
   static const double labeledWidth = 72;
@@ -289,7 +309,9 @@ class _IOS26GlassCapsuleState extends State<IOS26GlassCapsule> {
 
   @override
   Widget build(BuildContext context) {
-    if (defaultTargetPlatform != TargetPlatform.iOS) return _buildFallback();
+    if (!widget.native || defaultTargetPlatform != TargetPlatform.iOS) {
+      return _buildFallback();
+    }
     final params = _params;
     _sent ??= params;
     final glass = UiKitView(
@@ -333,58 +355,90 @@ class _IOS26GlassCapsuleState extends State<IOS26GlassCapsule> {
     );
   }
 
+  /// The capsule drawn by Flutter: a blurred, tinted pill with the same cells,
+  /// the selected one highlighted, as the native view lays them out.
   Widget _buildFallback() {
     final label = CupertinoColors.label.resolveFrom(context);
     final tint = widget.tint ?? CupertinoTheme.of(context).primaryColor;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: CupertinoColors.systemFill.resolveFrom(context),
-        borderRadius: BorderRadius.circular(IOS26GlassCapsule.width / 2),
-      ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: widget.inset),
-        child: Column(
-          children: [
-            for (var i = 0; i < widget.items.length; i++)
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => widget.onTap(i),
-                  child: Center(
-                    child: IconTheme.merge(
-                      data: IconThemeData(
-                        color: i == widget.selectedIndex ? tint : label,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          widget.items[i].fallback ??
-                              Text(
-                                widget.items[i].title ??
-                                    widget.items[i].symbol ??
-                                    widget.items[i].label ??
-                                    '',
-                                style: TextStyle(fontSize: 10, color: label),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                          if (widget.showLabels &&
-                              widget.items[i].label != null)
-                            Text(
-                              widget.items[i].label!,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: i == widget.selectedIndex ? tint : label,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+    final dark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : IOS26GlassCapsule.width;
+        final radius = BorderRadius.circular(width / 2);
+        return ClipRRect(
+          borderRadius: radius,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: dark ? const Color(0x1FFFFFFF) : const Color(0xBFFFFFFF),
+                borderRadius: radius,
+                border: Border.all(
+                  color: dark
+                      ? const Color(0x2EFFFFFF)
+                      : const Color(0x14000000),
+                  width: 0.5,
                 ),
               ),
-          ],
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: widget.inset),
+                child: Column(
+                  children: [
+                    for (var i = 0; i < widget.items.length; i++)
+                      Expanded(child: _fallbackCell(i, width, label, tint)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _fallbackCell(int i, double width, Color label, Color tint) {
+    final item = widget.items[i];
+    final selected = i == widget.selectedIndex;
+    final color = widget.selectedIndex == null
+        ? (item.tint ?? tint)
+        : (selected ? (item.tint ?? tint) : label);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => widget.onTap(i),
+      child: Padding(
+        // As the native highlight: 6 narrower than the capsule.
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: DecoratedBox(
+          key: selected ? IOS26GlassCapsule.fallbackSelectionKey : null,
+          decoration: BoxDecoration(
+            color: selected ? label.withValues(alpha: 0.1) : null,
+            borderRadius: BorderRadius.circular(width / 2),
+          ),
+          child: Center(
+            child: IconTheme.merge(
+              data: IconThemeData(color: color),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  item.fallback ??
+                      Text(
+                        item.title ?? item.symbol ?? item.label ?? '',
+                        style: TextStyle(fontSize: 10, color: label),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  if (widget.showLabels && item.label != null)
+                    Text(
+                      item.label!,
+                      style: TextStyle(fontSize: 10, color: color),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
