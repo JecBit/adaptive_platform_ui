@@ -72,13 +72,13 @@ class AdaptiveNavigationRail extends StatelessWidget {
   /// Space between the capsules and the window's edges.
   final double margin;
 
-  /// A widget above the destinations, such as the app's logo, given
-  /// [leadingExtent] of height.
+  /// A widget above the destinations, such as the app's logo, given at least
+  /// [leadingExtent] of height (what [planFor] counts).
   final Widget? leading;
   final double leadingExtent;
 
-  /// A widget above the actions, given [footerExtent] of height: for a control
-  /// that has to stay a Flutter widget.
+  /// A widget above the actions, given at least [footerExtent] of height (what
+  /// [planFor] counts): for a control that has to stay a Flutter widget.
   final Widget? footer;
   final double footerExtent;
 
@@ -195,10 +195,12 @@ class AdaptiveNavigationRail extends StatelessWidget {
               width: width,
               child: Column(
                 children: [
+                  // The extents are what the plan counts; a leading widget or a
+                  // footer a little taller (larger text) still gets its room.
                   if (leading != null)
-                    SizedBox(
-                      height: leadingExtent,
-                      child: Center(child: leading),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: leadingExtent),
+                      child: Center(heightFactor: 1, child: leading),
                     ),
                   AdaptiveTabCapsule(
                     destinations: destinations,
@@ -212,9 +214,9 @@ class AdaptiveNavigationRail extends StatelessWidget {
                   ),
                   const Spacer(),
                   if (hasFooter) ...[
-                    SizedBox(
-                      height: footerExtent,
-                      child: Center(child: footer),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: footerExtent),
+                      child: Center(heightFactor: 1, child: footer),
                     ),
                     const SizedBox(height: _gap),
                   ],
