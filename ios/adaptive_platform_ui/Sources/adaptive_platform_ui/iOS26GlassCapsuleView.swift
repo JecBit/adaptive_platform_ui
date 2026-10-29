@@ -83,9 +83,11 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
     private var imageCache: [String: UIImage] = [:]
 
     // The selection highlight as a lens that can be taken and dragged along
-    // the tabs, as on the iOS 26 tab bar. While it is dragged the highlight
-    // gives way to [lensView]: a drop of clear glass, a little larger than the
-    // capsule, in the same glass container so the two blend where they meet.
+    // the tabs, as on the iOS 26 tab bar. While it is dragged [lensView], a
+    // drop of clear glass a little larger than the capsule, lifts over the
+    // highlight, in the same glass container so the two blend where they meet.
+    // The highlight stays under it: on a plain background it is the only thing
+    // that shows the clear glass.
     let lensView = UIVisualEffectView()
     private static let lensOverhang: CGFloat = 6
     private let lensPan = LensPanRecognizer()
@@ -188,6 +190,9 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
 
     /// The glass container the capsule and the lens share.
     var glassContainerView: UIVisualEffectView { glassContainer }
+
+    /// The selection highlight, which stays under the lens while it is dragged.
+    var selectionHighlight: UIView { selectionView }
 
     // MARK: Content
 
@@ -501,7 +506,7 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
             return
         }
 
-        // The highlight gives way to the lens, which lifts off the capsule.
+        // The lens lifts off the capsule over the highlight.
         let overhang = Self.lensOverhang
         let size = CGSize(
             width: container.bounds.width + 2 * overhang,
@@ -523,7 +528,6 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
             animations: {
                 self.lensView.effect = glass
                 self.lensView.transform = .identity
-                self.selectionView.alpha = 0
             })
     }
 
@@ -576,7 +580,6 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
                 if let y = y { self.lensView.center.y = y }
                 self.lensView.effect = nil
                 self.lensView.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
-                self.selectionView.alpha = 1
             },
             completion: { _ in
                 guard !self.lensDragging else { return }

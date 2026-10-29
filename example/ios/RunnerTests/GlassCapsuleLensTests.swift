@@ -85,6 +85,15 @@ final class GlassCapsuleLensTests: XCTestCase {
         XCTAssertEqual(capsule.lensView.center.y, target, accuracy: 0.5)
     }
 
+    func testHighlightStaysUnderTheLensSoItShowsOnAPlainBackground() {
+        capsule.beginLensDrag()
+        let target = capsule.tabCenterY(at: 3)
+        capsule.moveLensDrag(toY: target)
+        XCTAssertEqual(capsule.selectionHighlight.alpha, 1)
+        XCTAssertFalse(capsule.selectionHighlight.isHidden)
+        XCTAssertEqual(capsule.selectionHighlight.center.y, target, accuracy: 0.5)
+    }
+
     func testLensDoesNotLeaveTheTabs() {
         capsule.beginLensDrag()
         capsule.moveLensDrag(toY: 10_000)
