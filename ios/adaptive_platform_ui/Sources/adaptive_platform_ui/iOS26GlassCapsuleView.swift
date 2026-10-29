@@ -65,6 +65,7 @@ private class GlassCapsuleContainer: UIView {
 // MARK: - Platform View
 class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
     private let container = GlassCapsuleContainer()
+    private let glassContainer = UIVisualEffectView()
     private let effectView = UIVisualEffectView()
     private let selectionView = UIView()
     private let stack = UIStackView()
@@ -82,7 +83,11 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
     private var imageCache: [String: UIImage] = [:]
 
     // The selection highlight as a lens that can be taken and dragged along
-    // the tabs, as on the iOS 26 tab bar.
+    // the tabs, as on the iOS 26 tab bar. While it is dragged the highlight
+    // gives way to [lensView]: a drop of clear glass, a little larger than the
+    // capsule, in the same glass container so the two blend where they meet.
+    let lensView = UIVisualEffectView()
+    private static let lensOverhang: CGFloat = 6
     private let lensPan = LensPanRecognizer()
     private let lensFeedback = UISelectionFeedbackGenerator()
     private var lensDragging = false
@@ -107,12 +112,19 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
             let glass = UIGlassEffect()
             glass.isInteractive = true
             effectView.effect = glass
+            glassContainer.effect = UIGlassContainerEffect()
         } else {
             effectView.effect = UIBlurEffect(style: .systemThinMaterial)
         }
+        glassContainer.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(glassContainer)
         effectView.clipsToBounds = true
         effectView.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(effectView)
+        glassContainer.contentView.addSubview(effectView)
+
+        lensView.isUserInteractionEnabled = false
+        lensView.isHidden = true
+        glassContainer.contentView.addSubview(lensView)
 
         selectionView.backgroundColor = UIColor.label.withAlphaComponent(0.1)
         selectionView.isUserInteractionEnabled = false
@@ -129,11 +141,16 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
         let bottom = stack.bottomAnchor.constraint(equalTo: effectView.contentView.bottomAnchor)
         stackTop = top
         stackBottom = bottom
+        let glassContent = glassContainer.contentView
         NSLayoutConstraint.activate([
-            effectView.topAnchor.constraint(equalTo: container.topAnchor),
-            effectView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            effectView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            effectView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            glassContainer.topAnchor.constraint(equalTo: container.topAnchor),
+            glassContainer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            glassContainer.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            glassContainer.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            effectView.topAnchor.constraint(equalTo: glassContent.topAnchor),
+            effectView.bottomAnchor.constraint(equalTo: glassContent.bottomAnchor),
+            effectView.leadingAnchor.constraint(equalTo: glassContent.leadingAnchor),
+            effectView.trailingAnchor.constraint(equalTo: glassContent.trailingAnchor),
             stack.leadingAnchor.constraint(equalTo: effectView.contentView.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: effectView.contentView.trailingAnchor),
             top,
@@ -168,6 +185,9 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
     }
 
     func view() -> UIView { container }
+
+    /// The glass container the capsule and the lens share.
+    var glassContainerView: UIVisualEffectView { glassContainer }
 
     // MARK: Content
 
@@ -433,32 +453,44 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
 
     // MARK: Lens
 
+    /// Where tab [index] is centred, in the content view's coordinates, which
+    /// are also the glass container's: the capsule fills it.
+    func tabCenterY(at index: Int) -> CGFloat {
+        buttons[index].convert(buttons[index].bounds, to: effectView.contentView).midY
+    }
+
     /// The tab nearest to [y], in the content view's coordinates.
     private func nearestButton(to y: CGFloat) -> Int? {
         guard !buttons.isEmpty else { return nil }
-        let content = effectView.contentView
-        return buttons.indices.min { a, b in
-            let ya = buttons[a].convert(buttons[a].bounds, to: content).midY
-            let yb = buttons[b].convert(buttons[b].bounds, to: content).midY
-            return abs(ya - y) < abs(yb - y)
-        }
+        return buttons.indices.min { abs(tabCenterY(at: $0) - y) < abs(tabCenterY(at: $1) - y) }
     }
 
     @objc private func lensDragged(_ pan: UIPanGestureRecognizer) {
-        let content = effectView.contentView
-        let y = pan.location(in: content).y
         switch pan.state {
         case .began:
-            lensDragging = true
-            lensNearest = selectedIndex
-            lensFeedback.prepare()
-            // Free the highlight from its button and let it follow the finger.
-            let frame = selectionView.frame
-            NSLayoutConstraint.deactivate(selectionConstraints)
-            selectionConstraints = []
-            selectionAnchor = nil
-            selectionView.translatesAutoresizingMaskIntoConstraints = true
-            selectionView.frame = frame
+            beginLensDrag()
+        case .changed:
+            moveLensDrag(toY: pan.location(in: effectView.contentView).y)
+        case .ended, .cancelled, .failed:
+            endLensDrag(committed: pan.state == .ended)
+        default:
+            break
+        }
+    }
+
+    func beginLensDrag() {
+        lensDragging = true
+        lensNearest = selectedIndex
+        lensFeedback.prepare()
+        // Free the highlight from its button and let it follow the finger.
+        let frame = selectionView.frame
+        NSLayoutConstraint.deactivate(selectionConstraints)
+        selectionConstraints = []
+        selectionAnchor = nil
+        selectionView.translatesAutoresizingMaskIntoConstraints = true
+        selectionView.frame = frame
+
+        guard #available(iOS 26.0, *) else {
             UIView.animate(
                 withDuration: 0.25, delay: 0,
                 usingSpringWithDamping: 0.7, initialSpringVelocity: 0,
@@ -466,35 +498,91 @@ class iOS26GlassCapsuleView: NSObject, FlutterPlatformView {
                 animations: {
                     self.selectionView.transform = CGAffineTransform(scaleX: 1.12, y: 1.12)
                 })
-        case .changed:
-            guard let first = buttons.first, let last = buttons.last else { return }
-            let top = first.convert(first.bounds, to: content).midY
-            let bottom = last.convert(last.bounds, to: content).midY
-            selectionView.center.y = min(max(y, top), bottom)
-            let nearest = nearestButton(to: selectionView.center.y)
-            if nearest != lensNearest {
-                lensNearest = nearest
-                lensFeedback.selectionChanged()
-            }
-        case .ended, .cancelled, .failed:
-            lensDragging = false
-            guard let target = nearestButton(to: selectionView.center.y) else { return }
-            // Settle on the tab it was let go over and report it, as a tap.
-            anchorSelection(to: buttons[target], animated: true)
-            if pan.state == .ended && target != selectedIndex {
-                channel.invokeMethod("onItemTapped", arguments: ["index": target])
-                // A tab that opens something else instead of being selected
-                // leaves the selection where it was: go back to it.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-                    guard let self = self, !self.lensDragging else { return }
-                    self.layoutChrome(animated: true)
-                }
-            } else {
-                layoutChrome(animated: true)
-            }
-        default:
-            break
+            return
         }
+
+        // The highlight gives way to the lens, which lifts off the capsule.
+        let overhang = Self.lensOverhang
+        let size = CGSize(
+            width: container.bounds.width + 2 * overhang,
+            height: frame.height + 2 * overhang)
+        lensView.bounds = CGRect(origin: .zero, size: size)
+        lensView.center = CGPoint(x: container.bounds.midX, y: frame.midY)
+        lensView.layer.cornerRadius = min(size.width, size.height) / 2
+        lensView.layer.cornerCurve = .continuous
+        lensView.effect = nil
+        lensView.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+        lensView.isHidden = false
+
+        let glass = UIGlassEffect(style: .clear)
+        glass.isInteractive = true
+        UIView.animate(
+            withDuration: 0.3, delay: 0,
+            usingSpringWithDamping: 0.7, initialSpringVelocity: 0,
+            options: [.beginFromCurrentState],
+            animations: {
+                self.lensView.effect = glass
+                self.lensView.transform = .identity
+                self.selectionView.alpha = 0
+            })
+    }
+
+    /// Follows the finger at [y], in the content view's coordinates, without
+    /// leaving the tabs.
+    func moveLensDrag(toY y: CGFloat) {
+        guard !buttons.isEmpty else { return }
+        let clamped = min(max(y, tabCenterY(at: 0)), tabCenterY(at: buttons.count - 1))
+        selectionView.center.y = clamped
+        lensView.center.y = clamped
+        let nearest = nearestButton(to: clamped)
+        if nearest != lensNearest {
+            lensNearest = nearest
+            lensFeedback.selectionChanged()
+        }
+    }
+
+    /// Lets go of the lens. [committed] is false for a cancelled drag, which
+    /// selects nothing.
+    func endLensDrag(committed: Bool) {
+        lensDragging = false
+        guard let target = nearestButton(to: selectionView.center.y) else {
+            dissolveLens(atY: nil)
+            return
+        }
+        // Settle on the tab it was let go over and report it, as a tap.
+        anchorSelection(to: buttons[target], animated: true)
+        dissolveLens(atY: tabCenterY(at: target))
+        if committed && target != selectedIndex {
+            channel.invokeMethod("onItemTapped", arguments: ["index": target])
+            // A tab that opens something else instead of being selected
+            // leaves the selection where it was: go back to it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+                guard let self = self, !self.lensDragging else { return }
+                self.layoutChrome(animated: true)
+            }
+        } else {
+            layoutChrome(animated: true)
+        }
+    }
+
+    /// The lens melts back into the highlight, over the tab at [y].
+    private func dissolveLens(atY y: CGFloat?) {
+        guard #available(iOS 26.0, *), !lensView.isHidden else { return }
+        UIView.animate(
+            withDuration: 0.3, delay: 0,
+            usingSpringWithDamping: 0.8, initialSpringVelocity: 0,
+            options: [.beginFromCurrentState],
+            animations: {
+                if let y = y { self.lensView.center.y = y }
+                self.lensView.effect = nil
+                self.lensView.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+                self.selectionView.alpha = 1
+            },
+            completion: { _ in
+                guard !self.lensDragging else { return }
+                self.lensView.isHidden = true
+                self.lensView.transform = .identity
+            })
     }
 
     @objc private func tapped(_ sender: UIButton) {

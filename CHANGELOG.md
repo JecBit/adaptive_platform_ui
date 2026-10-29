@@ -1,6 +1,7 @@
 # Changelog
 
 ## [Unreleased]
+* **IMPROVEMENT**: iOS 26: dragging the selection along a vertical glass capsule (the iPhone Duo bar, `AdaptiveNavigationRail`) now lifts a lens of clear, interactive Liquid Glass off the capsule, as the tab bar does, instead of growing the grey highlight. The capsule and the lens share a `UIGlassContainerEffect`; at rest the selection looks as before
 * **NEW**: `iconImage` on `AdaptiveAppBarAction` shows a picture, such as a profile photo, in place of the symbol: PNG or JPEG bytes that the horizontal iOS 26 toolbar draws round and untinted at the size of its other items (decoded at that size, so a large photo costs no more than a small one; the symbol is the fallback if the bytes do not decode), and iOS 18 and Android draw as a round `Image.memory`. It counts as an icon for the "at least one of" assertion
 * **NEW**: The horizontal iOS 26 toolbar now draws `AdaptiveAppBarAction.badgeCount` as the item's own `UIBarButtonItem.badge`; it used to ignore it
 * **FIX**: iPhone Duo: a detail pane built inside the tab scaffold (a two-pane layout, nothing pushed) kept the tab bar hidden once it became the chrome owner, because the owner lookup only recognised shell routes around a nested navigator. A pane on the tab scaffold's own route now keeps the tab bar; pages pushed above the tabs still hide it (reported and diagnosed by @monster-echo, #173)
