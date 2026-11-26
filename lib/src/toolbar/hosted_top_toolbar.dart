@@ -156,6 +156,7 @@ class HostedTopToolbar extends StatelessWidget {
                     content: lower,
                     opacity: lowerOpacity,
                     interactive: !upperOwns,
+                    leadingInset: _leadingInsetFor(context, lowerBack),
                   ),
                 if (upperEntry != null && !upper.isEmpty)
                   _layer(
@@ -163,11 +164,12 @@ class HostedTopToolbar extends StatelessWidget {
                     content: upper,
                     opacity: upperOpacity,
                     interactive: upperOwns,
+                    leadingInset: _leadingInsetFor(context, upperBack),
                   ),
                 if (backOpacity != null)
                   Positioned(
                     key: const ValueKey<String>('adaptive_toolbar_back'),
-                    left: 16 + (_isWindowed(context) ? 62 : 0),
+                    left: _backLeft(context),
                     bottom: 0,
                     child: FadeTransition(
                       key: const ValueKey<String>('adaptive_toolbar_back_fade'),
@@ -190,6 +192,16 @@ class HostedTopToolbar extends StatelessWidget {
     );
   }
 
+  /// Where the shared Back sits: past the window controls on a windowed iPad.
+  static double _backLeft(BuildContext context) =>
+      16 + (_isWindowed(context) ? 62 : 0);
+
+  /// Room a page's native bar leaves at its leading edge for the shared Back
+  /// drawn over it ([hasBack]), so the items it puts at the start (before a
+  /// flexible spacer) sit beside Back instead of behind it.
+  static double _leadingInsetFor(BuildContext context, bool hasBack) =>
+      hasBack ? _backLeft(context) - 16 + kHostedToolbarHeight : 0;
+
   /// One page's bar. The back button is not part of it: the shared one is
   /// drawn on top of all page layers.
   Widget _layer({
@@ -197,6 +209,7 @@ class HostedTopToolbar extends StatelessWidget {
     required TopToolbarContent content,
     required Animation<double> opacity,
     required bool interactive,
+    double leadingInset = 0,
   }) {
     // alwaysIncludeSemantics: a layer that fades to zero during a back swipe
     // must not drop its semantics and restore them when the swipe comes back;
@@ -226,6 +239,7 @@ class HostedTopToolbar extends StatelessWidget {
                   actions: content.actions,
                   tintColor: content.tint,
                   showsGradient: false,
+                  leadingInset: leadingInset,
                   onActionTap: (index) {
                     if (index >= 0 && index < content.actions.length) {
                       content.actions[index].onPressed();

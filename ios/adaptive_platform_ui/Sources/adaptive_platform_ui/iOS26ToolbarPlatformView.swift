@@ -312,6 +312,24 @@ class iOS26ToolbarPlatformView: NSObject, FlutterPlatformView {
             }
         }
 
+        // Room for a control drawn over the bar at its leading edge (the fixed
+        // toolbar's shared Back): an empty item without glass of its own, so
+        // the items at the start sit beside that control, not behind it.
+        if let inset = (params["leadingInset"] as? NSNumber)?.doubleValue,
+           inset > 0, !leftGroup.isEmpty {
+            let room = UIView(frame: CGRect(x: 0, y: 0, width: inset, height: 44))
+            room.isUserInteractionEnabled = false
+            room.widthAnchor.constraint(equalToConstant: inset).isActive = true
+            let spacer = UIBarButtonItem(customView: room)
+            spacer.isAccessibilityElement = false
+            if #available(iOS 26.0, *) {
+                MainActor.assumeIsolated {
+                    spacer.hidesSharedBackground = true
+                }
+            }
+            leadingItems.append(spacer)
+        }
+
         // Assign to navigation item
         navigationItem.leftBarButtonItems = leadingItems + leftGroup
         navigationItem.rightBarButtonItems = rightGroup.reversed()
