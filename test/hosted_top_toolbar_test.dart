@@ -2,7 +2,9 @@ import 'package:adaptive_platform_ui/adaptive_platform_ui.dart';
 import 'package:adaptive_platform_ui/src/toolbar/hosted_duo_bar.dart';
 import 'package:adaptive_platform_ui/src/toolbar/hosted_top_toolbar.dart';
 import 'package:adaptive_platform_ui/src/toolbar/toolbar_chrome_scope.dart';
+import 'package:adaptive_platform_ui/src/widgets/ios26/ios26_native_toolbar.dart';
 import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoPageRoute;
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable/foldable.dart';
@@ -123,6 +125,60 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('body:Detail'), findsNothing);
       expect(backButton, findsNothing);
+    });
+
+    group('items at the start of a page with Back', () {
+      Widget pageWithStartItem(String title) => AdaptiveScaffold(
+        appBar: AdaptiveAppBar(
+          title: title,
+          useNativeToolbar: true,
+          actions: [
+            AdaptiveAppBarAction(
+              iosSymbol: 'line.3.horizontal',
+              icon: Icons.menu,
+              spacerAfter: ToolbarSpacerType.flexible,
+              onPressed: () {},
+            ),
+          ],
+        ),
+        body: Center(child: Text('body:$title')),
+      );
+
+      IOS26NativeToolbar nativeBarOf(WidgetTester tester, String title) =>
+          tester.widget<IOS26NativeToolbar>(
+            find.byWidgetPredicate(
+              (w) => w is IOS26NativeToolbar && w.title == title,
+            ),
+          );
+
+      testWidgets('the native bar leaves room for the shared Back, which is '
+          'drawn over it, so its first items are not hidden behind it', (
+        tester,
+      ) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        usePhone(tester);
+        tester.view.display.size = tester.view.physicalSize;
+        addTearDown(tester.view.display.resetSize);
+        final nav = GlobalKey<NavigatorState>();
+        await tester.pumpWidget(
+          hostedApp(navigatorKey: nav, home: pageWithStartItem('Home')),
+        );
+        await tester.pump();
+        // The root page has no Back: nothing to leave room for.
+        expect(nativeBarOf(tester, 'Home').leadingInset, 0);
+
+        nav.currentState!.push(
+          MaterialPageRoute<void>(builder: (_) => pageWithStartItem('Chat')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          nativeBarOf(tester, 'Chat').leadingInset,
+          tester.getRect(backButton).right - 16,
+        );
+        debugDefaultTargetPlatformOverride = null;
+      });
     });
 
     testWidgets('one fixed bar at the top shows the page in front', (

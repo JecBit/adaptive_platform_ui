@@ -21,6 +21,7 @@ class IOS26NativeToolbar extends StatefulWidget {
     this.height = 44.0,
     this.showNativeView = true,
     this.showsGradient = true,
+    this.leadingInset = 0,
   });
 
   final String? title;
@@ -49,6 +50,11 @@ class IOS26NativeToolbar extends StatefulWidget {
   /// behind all page layers.
   final bool showsGradient;
 
+  /// Room, in points, the bar leaves before its leading items for a control
+  /// drawn over it at the leading edge (the fixed toolbar's shared Back), so
+  /// the items that go at the start are not hidden behind it.
+  final double leadingInset;
+
   @override
   State<IOS26NativeToolbar> createState() => _IOS26NativeToolbarState();
 }
@@ -58,6 +64,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
   bool? _lastIsDark;
   int? _lastTint;
   List<AdaptiveAppBarAction>? _lastActions;
+  double _lastLeadingInset = 0;
 
   bool get _isDark =>
       MediaQuery.platformBrightnessOf(context) == Brightness.dark;
@@ -117,14 +124,18 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
     // empty one both mean "no actions", so going from null to a real list
     // (or back) has to reach the native bar too (#84).
     final actions = widget.actions;
-    if (!_actionsEqual(_lastActions, actions)) {
+    final leadingInset = widget.leadingInset;
+    if (!_actionsEqual(_lastActions, actions) ||
+        _lastLeadingInset != leadingInset) {
       try {
         final params = <String, dynamic>{
           if (actions != null && actions.isNotEmpty)
             'actions': actions.map((a) => a.toNativeMap()).toList(),
+          if (leadingInset > 0) 'leadingInset': leadingInset,
         };
         await ch.invokeMethod('updateActions', params);
         _lastActions = actions != null ? List.of(actions) : null;
+        _lastLeadingInset = leadingInset;
       } catch (e) {
         // Ignore errors if platform view is not yet ready
       }
@@ -177,6 +188,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
       'isDark': _isDark,
       if (!widget.showsGradient) 'showsGradient': false,
       if (widget.tintColor != null) 'tint': _colorToARGB(widget.tintColor!),
+      if (widget.leadingInset > 0) 'leadingInset': widget.leadingInset,
     };
 
     return AnimatedContainer(
@@ -223,6 +235,7 @@ class _IOS26NativeToolbarState extends State<IOS26NativeToolbar> {
         ? _colorToARGB(widget.tintColor!)
         : null;
     _lastActions = widget.actions != null ? List.of(widget.actions!) : null;
+    _lastLeadingInset = widget.leadingInset;
   }
 
   Future<dynamic> _handleMethodCall(MethodCall call) async {
